@@ -1,5 +1,5 @@
 {
-  "allowDirectMerges": ["master", "pytorch:master", "fb-config"],
+  "allowDirectMerges": ["master", "pytorch:master", "fb-config", "release/0.8.0"],
   "allowBotCommands": false,
   "internalRepository": "fbsource"
 }
