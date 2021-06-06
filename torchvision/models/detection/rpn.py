@@ -141,10 +141,11 @@ class RegionProposalNetwork(torch.nn.Module):
                  fg_iou_thresh, bg_iou_thresh,
                  batch_size_per_image, positive_fraction,
                  #
-                 pre_nms_top_n, post_nms_top_n, nms_thresh):
+                 pre_nms_top_n, post_nms_top_n, nms_thresh, focal_loss):
         super(RegionProposalNetwork, self).__init__()
         self.anchor_generator = anchor_generator
         self.head = head
+        self.focal_loss = focal_loss
         self.box_coder = det_utils.BoxCoder(weights=(1.0, 1.0, 1.0, 1.0))
 
         # used during training
@@ -298,9 +299,14 @@ class RegionProposalNetwork(torch.nn.Module):
             size_average=False,
         ) / (sampled_inds.numel())
 
-        objectness_loss = F.binary_cross_entropy_with_logits(
-            objectness[sampled_inds], labels[sampled_inds]
-        )
+        if not self.focal_loss:
+            objectness_loss = F.binary_cross_entropy_with_logits(
+                objectness[sampled_inds], labels[sampled_inds]
+            )
+        else:
+            objectness_loss = det_utils.bfocal_logits_loss(
+                objectness[sampled_inds], labels[samples_inds], 0.25, 2
+            )
 
         return objectness_loss, box_loss
 

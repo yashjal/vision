@@ -4,6 +4,8 @@ import torch
 from torch.jit.annotations import List, Tuple
 from torch import Tensor
 import torchvision
+import torch.nn.functional as F
+from torch.autograd import Variable
 
 
 class BalancedPositiveNegativeSampler(object):
@@ -349,3 +351,47 @@ def smooth_l1_loss(input, target, beta: float = 1. / 9, size_average: bool = Tru
     if size_average:
         return loss.mean()
     return loss.sum()
+
+
+def bfocal_logits_loss(input, target, alpha: float = 1.1, gamma: float = 0., size_average: bool=True):
+
+    logpt = F.logsigmoid(input)
+    pt = Variable(logpt.data.exp())
+    logpt = target*logpt + (1-target)*(1-pt).log()
+
+    if alpha <= 1. and alpha >= 0.:
+        alpha = torch.Tensor([alpha, 1-alpha])
+        if alpha.type() != logpt.data.type():
+            alpha = alpha.type_as(logpt.data)
+        at = alpha.gather(0, target.type(torch.LongTensor).data)
+        logpt = logpt * Variable(at)
+
+    loss = -1 * (1-pt)**gamma * logpt
+    if size_average:
+        return loss.mean()
+    return loss.sum()
+
+
+# src: https://github.com/clcarwin/focal_loss_pytorch/blob/master/focalloss.py
+def focal_logits_loss(input, target, alpha: float = 1.1, gamma: float = 0., size_average: bool=True):
+
+    target = target.view(-1,1)
+
+    logpt = F.log_softmax(input,dim=1)
+    logpt = logpt.gather(1, target)
+    logpt = logpt.view(-1)
+    pt = Variable(logpt.data.exp())
+
+    if alpha <= 1. and alpha >= 0.:
+        alpha = torch.Tensor([alpha, 1-alpha])
+        if alpha.type() != logpt.data.type():
+            alpha = alpha.type_as(logpt.data)
+        select = (target != 0).type(torch.LongTensor)
+        at = alpha.gather(0, select.data.view(-1))
+        logpt = logpt * Variable(at)
+
+    loss = -1 * (1-pt)**gamma * logpt
+    if size_average:
+        return loss.mean()
+    return loss.sum()
+

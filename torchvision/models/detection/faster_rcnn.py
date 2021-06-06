@@ -157,7 +157,7 @@ class FasterRCNN(GeneralizedRCNN):
                  box_score_thresh=0.05, box_nms_thresh=0.5, box_detections_per_img=100,
                  box_fg_iou_thresh=0.5, box_bg_iou_thresh=0.5,
                  box_batch_size_per_image=512, box_positive_fraction=0.25,
-                 bbox_reg_weights=None):
+                 bbox_reg_weights=None, focal_loss=True):
 
         if not hasattr(backbone, "out_channels"):
             raise ValueError(
@@ -196,7 +196,8 @@ class FasterRCNN(GeneralizedRCNN):
             rpn_anchor_generator, rpn_head,
             rpn_fg_iou_thresh, rpn_bg_iou_thresh,
             rpn_batch_size_per_image, rpn_positive_fraction,
-            rpn_pre_nms_top_n, rpn_post_nms_top_n, rpn_nms_thresh)
+            rpn_pre_nms_top_n, rpn_post_nms_top_n, rpn_nms_thresh,
+            focal_loss)
 
         if box_roi_pool is None:
             box_roi_pool = MultiScaleRoIAlign(
@@ -223,7 +224,8 @@ class FasterRCNN(GeneralizedRCNN):
             box_fg_iou_thresh, box_bg_iou_thresh,
             box_batch_size_per_image, box_positive_fraction,
             bbox_reg_weights,
-            box_score_thresh, box_nms_thresh, box_detections_per_img)
+            box_score_thresh, box_nms_thresh, box_detections_per_img,
+            focal_loss)
 
         if image_mean is None:
             image_mean = [0.485, 0.456, 0.406]

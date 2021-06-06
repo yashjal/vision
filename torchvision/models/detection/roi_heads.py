@@ -13,7 +13,8 @@ from . import _utils as det_utils
 from torch.jit.annotations import Optional, List, Dict, Tuple
 
 
-def fastrcnn_loss(class_logits, box_regression, labels, regression_targets):
+def fastrcnn_loss(class_logits, box_regression, labels, regression_targets,
+                 focal_loss):
     # type: (Tensor, Tensor, List[Tensor], List[Tensor]) -> Tuple[Tensor, Tensor]
     """
     Computes the loss for Faster R-CNN.
@@ -32,7 +33,11 @@ def fastrcnn_loss(class_logits, box_regression, labels, regression_targets):
     labels = torch.cat(labels, dim=0)
     regression_targets = torch.cat(regression_targets, dim=0)
 
-    classification_loss = F.cross_entropy(class_logits, labels)
+    if not focal_loss:
+        classification_loss = F.cross_entropy(class_logits, labels)
+    else:
+        classification_loss = det_utils.focal_logits_loss(
+            class_logits, labels, 0.25, 2)
 
     # get indices that correspond to the regression targets for
     # the corresponding ground truth labels, to be used with
@@ -501,6 +506,7 @@ class RoIHeads(torch.nn.Module):
                  score_thresh,
                  nms_thresh,
                  detections_per_img,
+                 focal_loss,
                  # Mask
                  mask_roi_pool=None,
                  mask_head=None,
@@ -521,6 +527,7 @@ class RoIHeads(torch.nn.Module):
         self.fg_bg_sampler = det_utils.BalancedPositiveNegativeSampler(
             batch_size_per_image,
             positive_fraction)
+        self.focal_loss = focal_loss
 
         if bbox_reg_weights is None:
             bbox_reg_weights = (10., 10., 5., 5.)
@@ -758,7 +765,8 @@ class RoIHeads(torch.nn.Module):
         if self.training:
             assert labels is not None and regression_targets is not None
             loss_classifier, loss_box_reg = fastrcnn_loss(
-                class_logits, box_regression, labels, regression_targets)
+                class_logits, box_regression, labels, regression_targets,
+                self.focal_loss)
             losses = {
                 "loss_classifier": loss_classifier,
                 "loss_box_reg": loss_box_reg
