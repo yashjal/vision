@@ -353,11 +353,11 @@ def smooth_l1_loss(input, target, beta: float = 1. / 9, size_average: bool = Tru
     return loss.sum()
 
 
-def bfocal_logits_loss(input, target, alpha: float = 1.1, gamma: float = 0., size_average: bool=True):
+def bfocal_logits_loss(input, target, alpha: float = 0.25, gamma: float = 2., size_average: bool=True):
 
     logpt = F.logsigmoid(input)
     pt = Variable(logpt.data.exp())
-    logpt = target*logpt + (1-target)*(1-pt).log()
+    logpt = target*logpt + (1-target)*(1-pt).clamp(min=1e-11).log()
 
     if alpha <= 1. and alpha >= 0.:
         alpha = torch.Tensor([alpha, 1-alpha])
@@ -373,7 +373,7 @@ def bfocal_logits_loss(input, target, alpha: float = 1.1, gamma: float = 0., siz
 
 
 # src: https://github.com/clcarwin/focal_loss_pytorch/blob/master/focalloss.py
-def focal_logits_loss(input, target, alpha: float = 1.1, gamma: float = 0., size_average: bool=True):
+def focal_logits_loss(input, target, alpha: float = 0.25, gamma: float = 2., size_average: bool=True):
 
     target = target.view(-1,1)
 

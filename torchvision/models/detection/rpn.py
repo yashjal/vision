@@ -305,7 +305,7 @@ class RegionProposalNetwork(torch.nn.Module):
             )
         else:
             objectness_loss = det_utils.bfocal_logits_loss(
-                objectness[sampled_inds], labels[samples_inds], 0.25, 2
+                objectness[sampled_inds], labels[sampled_inds]
             )
 
         return objectness_loss, box_loss
