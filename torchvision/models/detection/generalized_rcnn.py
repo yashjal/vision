@@ -96,8 +96,9 @@ class GeneralizedRCNN(nn.Module):
         features = self.backbone(images.tensors)
         if isinstance(features, torch.Tensor):
             features = OrderedDict([('0', features)])
-        proposals, proposal_losses = self.rpn(images, features, targets)
-        detections, detector_losses = self.roi_heads(features, proposals, images.image_sizes, targets)
+        proposals, proposal_losses, proposal_scores = self.rpn(images, features, targets)
+        detections, detector_losses = self.roi_heads(features, proposals, images.image_sizes, targets, 
+                                                     proposal_scores=proposal_scores)
         detections = self.transform.postprocess(detections, images.image_sizes, original_image_sizes)
 
         losses = {}

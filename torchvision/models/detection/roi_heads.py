@@ -672,7 +672,8 @@ class RoIHeads(torch.nn.Module):
                                class_logits,    # type: Tensor
                                box_regression,  # type: Tensor
                                proposals,       # type: List[Tensor]
-                               image_shapes     # type: List[Tuple[int, int]]
+                               image_shapes,    # type: List[Tuple[int, int]]
+                               proposal_scores
                                ):
         # type: (...) -> Tuple[List[Tensor], List[Tensor], List[Tensor]]
         device = class_logits.device
@@ -689,8 +690,14 @@ class RoIHeads(torch.nn.Module):
         all_boxes = []
         all_scores = []
         all_labels = []
-        for boxes, scores, image_shape in zip(pred_boxes_list, pred_scores_list, image_shapes):
+        all_pscores = []
+
+        for boxes, scores, image_shape, pscores in zip(pred_boxes_list, pred_scores_list, image_shapes, proposal_scores):
             boxes = box_ops.clip_boxes_to_image(boxes, image_shape)
+
+            # transform pscores to include all classes
+            pscores = pscores.sigmoid()
+            pscores = pscores.repeat(num_classes,1).transpose(0,1)
 
             # create labels for each prediction
             labels = torch.arange(num_classes, device=device)
@@ -700,37 +707,44 @@ class RoIHeads(torch.nn.Module):
             boxes = boxes[:, 1:]
             scores = scores[:, 1:]
             labels = labels[:, 1:]
+            pscores = pscores[:, 1:]
 
             # batch everything, by making every class prediction be a separate instance
             boxes = boxes.reshape(-1, 4)
             scores = scores.reshape(-1)
             labels = labels.reshape(-1)
+            pscores = pscores.reshape(-1)
 
             # remove low scoring boxes
             inds = torch.where(scores > self.score_thresh)[0]
             boxes, scores, labels = boxes[inds], scores[inds], labels[inds]
+            pscores = pscores[inds]
 
             # remove empty boxes
             keep = box_ops.remove_small_boxes(boxes, min_size=1e-2)
             boxes, scores, labels = boxes[keep], scores[keep], labels[keep]
+            pscores = pscores[keep]
 
             # non-maximum suppression, independently done per class
             keep = box_ops.batched_nms(boxes, scores, labels, self.nms_thresh)
             # keep only topk scoring predictions
             keep = keep[:self.detections_per_img]
             boxes, scores, labels = boxes[keep], scores[keep], labels[keep]
+            pscores = pscores[keep]
 
             all_boxes.append(boxes)
             all_scores.append(scores)
             all_labels.append(labels)
+            all_pscores.append(pscores)
 
-        return all_boxes, all_scores, all_labels
+        return all_boxes, all_scores, all_labels, all_pscores
 
     def forward(self,
                 features,      # type: Dict[str, Tensor]
                 proposals,     # type: List[Tensor]
                 image_shapes,  # type: List[Tuple[int, int]]
-                targets=None   # type: Optional[List[Dict[str, Tensor]]]
+                targets=None,  # type: Optional[List[Dict[str, Tensor]]]
+                proposal_scores=None
                 ):
         # type: (...) -> Tuple[List[Dict[str, Tensor]], Dict[str, Tensor]]
         """
@@ -772,7 +786,7 @@ class RoIHeads(torch.nn.Module):
                 "loss_box_reg": loss_box_reg
             }
         else:
-            boxes, scores, labels = self.postprocess_detections(class_logits, box_regression, proposals, image_shapes)
+            boxes, scores, labels, pscores = self.postprocess_detections(class_logits, box_regression, proposals, image_shapes, proposal_scores)
             num_images = len(boxes)
             for i in range(num_images):
                 result.append(
@@ -780,6 +794,7 @@ class RoIHeads(torch.nn.Module):
                         "boxes": boxes[i],
                         "labels": labels[i],
                         "scores": scores[i],
+                        "pscores": pscores[i]
                     }
                 )
 
